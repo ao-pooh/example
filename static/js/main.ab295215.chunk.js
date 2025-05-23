@@ -121,18 +121,11 @@
             version: "",
             url: "",
           },
-
           M = function () {
-            // ✅ Wi-Fi情報を取得する関数（iPhoneでは制限あり）
-            function getWifiInfo() {
-                if (navigator.connection) {
-                    console.log("ネットワークタイプ:", navigator.connection.effectiveType);
-                    return navigator.connection.effectiveType; // BSSIDの代替情報
-                } else {
-                    console.warn("Wi-Fi情報の取得はこのデバイスではサポートされていません");
-                    return null;
-                }
-            }
+            const [wifiLabelInput, setWifiLabelInput] = r.a.useState(""); // 入力欄
+            const [confirmedLabel, setConfirmedLabel] = r.a.useState(""); // 決定後に送る用
+            const [activeLabel, setActiveLabel] = r.a.useState(""); // 現在ループで使っているラベル
+            const wifiIntervalRef = r.a.useRef(null); // ← useRefで永続保持
             var e = r.a.useState("https://rowma.moriokalab.com"),
               a = Object(d.a)(e, 2),
               t = a[0],
@@ -495,83 +488,79 @@
                 return Xa[e] && Xa[e].length > 60 ? 50 : 20;
               },
               yt = (function () {
+                console.log("ytに入りました");
+                // if (wifiIntervalRef.current !== null) {
+                //     console.log("2回目はここに入るべき");
+                //     clearInterval(wifiIntervalRef.current); // 前回の送信ループを止める
+                //     wifiIntervalRef.current = null;
+                //   }
+                // 前回のラベルと異なるならループを停止して再スタート
+                if (wifiLabelInput !== confirmedLabel) {
+                    console.log("ラベルが変更されました");
+
+                    // 前回のループ停止
+                    if (wifiIntervalRef.current !== null) {
+                    clearInterval(wifiIntervalRef.current);
+                    wifiIntervalRef.current = null;
+                    console.log("前のループを停止しました");
+                    }
+
+                    // 新しいラベルをconfirmedにセット
+                    setConfirmedLabel(wifiLabelInput);
+                } 
                 var e = Object(u.a)(
                   i.a.mark(function e() {
-                    var bssidData,selectedUUID, jsonBssidData, rowmaUrl, response, errorText;
-                    return i.a.wrap(function (e) {
-                      for (;;)
-                        switch ((e.prev = e.next)) {
-                            case 0:
-                            // ✅ UUID（ユーザーが選択したロボット）
-                            selectedUUID = Q; 
-                            if (!selectedUUID) {
-                                alert("UUIDを選択してください");
-                                return e.abrupt("return");
-                            }
-                            // ✅ BSSID を取得
-                            bssidData = getWifiInfo(); 
-                            
-                            if (!bssidData) {
-                                console.warn("Wi-Fi情報を取得できませんでした");
-                                alert("Wi-Fi情報を取得できませんでした");
-                                return e.abrupt("return");
-                            }
-                            var jsonBssidData = JSON.stringify({ data: bssidData });
-
-                            // ✅ BSSID を JSON 形式の文字列として送信
-                            ka(!0);
-                            e.next = 6;
-                            console.log(jsonBssidData);
-                            alert("BSSIDを送信しました")
-                            return s.publish(Q, "/rowma/bssid", JSON.parse(jsonBssidData));
-                            
-                            case 5:
-                            ka(!1);
-                            case 6:
-                            case "end":
-                            return e.stop();
-                        }
-                        //     // return (
-                        //     ka(!0);// 処理中フラグをON
-                        //       // ✅ BSSIDを取得
-                        //   bssidData = getWifiInfo(); 
-                        //   // ✅ BSSIDが取得できなかった場合、処理を終了
-                        //   if (!bssidData) {
-                        //     console.warn("BSSID情報が取得できませんでした");
-                        //     ka(!1); // 処理中フラグをOFF
-                        //     return e.abrupt("return");
-                        //   }
-
-                        //   // ✅ BSSIDを Rowma に送信
-                        //   return (e.next = 3), s.publish(Q, "rowma/bssid", JSON.stringify({ bssid: bssidData }));
-
-                        //     //   (e.next = 3),
-                        //     //   s.publish(Q, Ue, JSON.parse(xe))
-                        //     // );
-                        //   case 3:
-                        //     ka(!1);
-                        //   case 4:
-                        //   case "end":
-                        //     return e.stop();
-                        // }
-                    }, e);
-                  })
-                );
-                return function () {
-                  return e.apply(this, arguments);
-                };
-              })(),
-              St = (function () {
-                var e = Object(u.a)(
-                  i.a.mark(function e() {
+                    var selectedUUID;
                     return i.a.wrap(function (e) {
                       for (;;)
                         switch ((e.prev = e.next)) {
                           case 0:
-                            return Aa(!0), (e.next = 3), s.addScript(Q, tt, lt);
-                          case 3:
-                            Aa(!1);
-                          case 4:
+                            // ✅ UUID（ユーザーが選択したロボット）
+                            selectedUUID = Q;
+                            if (!selectedUUID) {
+                              alert("UUIDを選択してください");
+                              return e.abrupt("return");
+                            }
+                            // ✅ 10秒おきにWi-Fi情報を取得して送るループ
+                            wifiIntervalRef.current = setInterval(() => {
+                                console.log("次の行でリクエストです");
+                                fetch("http://192.168.10.79:3000/api/wifi")
+                                .then((res) => res.json())
+                                .then((data) => {
+                                  console.log("受け取ったWi-Fi情報:", data);
+                                  if (data && Q && wifiLabelInput) {
+                                    console.log("Wi-FiデータをRowmaに送信:", data);
+                                    // ここでRowmaにpublishするコードを追加できる
+                                    const BSSIDandName = wifiLabelInput+","+data.BSSID;
+                                    const jsonBssidData = JSON.stringify({ data: BSSIDandName });
+                                    console.log(jsonBssidData);
+                                    s.publish(Q, "/strongest_wifi", JSON.parse(jsonBssidData))
+                                        .then(() => console.log("Rowmaへの送信成功"))
+                                        .catch((err) => console.error("Rowmaへの送信失敗", err));
+                                  }
+                                })
+                                .catch((err) => console.error("Wi-Fi取得エラー", err));
+                            }, 10000); // ← 毎回10秒固定間隔
+              
+                            // （参考）以前コメントアウトしていたコード
+                            // ✅ BSSID を取得
+                            // bssidData = getWifiInfo(); 
+                            // if (!bssidData) {
+                            //     console.warn("Wi-Fi情報を取得できませんでした");
+                            //     alert("Wi-Fi情報を取得できませんでした");
+                            //     return e.abrupt("return");
+                            // }
+                            // var jsonBssidData = JSON.stringify({ data: bssidData });
+                            // // ✅ BSSID を JSON 形式の文字列として送信
+                            // ka(!0);
+                            // e.next = 6;
+                            // console.log(jsonBssidData);
+                            // alert("BSSIDを送信しました")
+                            // return s.publish(Q, "/rowma/bssid", JSON.parse(jsonBssidData));
+                            // case 5:111                                                                                                                                                                                   
+                            // ka(!1);
+              
+                          case 1:
                           case "end":
                             return e.stop();
                         }
@@ -582,6 +571,28 @@
                   return e.apply(this, arguments);
                 };
               })();
+
+            //   St = (function () {
+            //     var e = Object(u.a)(
+            //       i.a.mark(function e() {
+            //         return i.a.wrap(function (e) {
+            //           for (;;)
+            //             switch ((e.prev = e.next)) {
+            //               case 0:
+            //                 return Aa(!0), (e.next = 3), s.addScript(Q, tt, lt);
+            //               case 3:
+            //                 Aa(!1);
+            //               case 4:
+            //               case "end":
+            //                 return e.stop();
+            //             }
+            //         }, e);
+            //       })
+            //     );
+            //     return function () {
+            //       return e.apply(this, arguments);
+            //     };
+            //   })();
             return r.a.createElement(
               "div",
               { className: "".concat(st.root, " App") },
@@ -659,6 +670,66 @@
                         )
                       )
                     ),
+                    r.a.createElement(
+                        S.a,
+                        { item: !0, xs: 12, sm: 12, md: 4 },
+                        r.a.createElement(
+                          y.a,
+                          { className: st.paper, style: { height: '100%' } },
+                          r.a.createElement(
+                            "div",
+                            null,
+                            r.a.createElement(
+                              z.a,
+                              { component: "fieldset", className: st.radioButtons },
+                              r.a.createElement(
+                                "div",
+                                { className: "my-4" },
+                                r.a.createElement(
+                                  w.a,
+                                  { variant: "h5" },
+                                  "ユーザー名入力欄"
+                                )
+                              ),
+                              r.a.createElement(
+                                k.a,
+                                {
+                                  label: "名字をローマ字で入力",
+                                  variant: "outlined",
+                                  size: "medium",
+                                  className: st.textField,
+                                  value: wifiLabelInput,
+                                  onChange: function (e) {
+                                    setWifiLabelInput(e.target.value);
+                                  },
+                                  style: { width: "100%" } // 👈 横幅を最大に
+                                }
+                            ),
+                            r.a.createElement(
+                            "div",
+                            { className: "mt-4" },
+                            r.a.createElement(
+                              A.a,
+                              {
+                                variant: "contained",
+                                color: "primary",
+                                onClick: function () {
+                                    const alphanumRegex = /^[a-zA-Z0-9]*$/;
+                                    if (!alphanumRegex.test(wifiLabelInput)) {
+                                      alert("半角英数字のみ使用できます");
+                                      return;
+                                    }
+                                    setConfirmedLabel(wifiLabelInput);
+                                    console.log("ラベルを「" + wifiLabelInput + "」に設定しました");
+                                },
+                              },
+                              "決定"
+                            )
+                          )
+                        )
+                      )
+                  )
+                ),
                     r.a.createElement(
                       S.a,
                       { item: !0, xs: 12, sm: 12, md: 4 },
@@ -740,10 +811,11 @@
                         )
                       )
                     )
-                  )
+
                 )
-              )
-            );
+              ),
+            )
+        )
           };
         Boolean(
           "localhost" === window.location.hostname ||
